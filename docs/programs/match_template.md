@@ -198,7 +198,59 @@ df = mt_manager.results_to_dataframe(locate_peaks_kwargs={"false_positives": 1.0
 
 # Uses a pre-defined z-score cutoff for peak calling
 df = mt_manager.results_to_dataframe(locate_peaks_kwargs={"z_score_cutoff": 7.8})
+
 ```
+
+## Restricting the search to regions of interest
+
+When the approximate particle locations are known *a priori* you can instruct the
+match template program to evaluate correlations only within specific spatial
+windows.  Limiting the search domain reduces the number of cross-correlations that
+must be computed and consequently lowers the noise floor of the z-score map.  This
+behaviour is configured through the optional `search_windows` block in the YAML
+configuration file:
+
+```yaml
+search_windows:
+  - center_y_img: 2048.0
+    center_x_img: 1984.0
+    half_height: 64
+    half_width: 96
+```
+
+Each entry defines a rectangular region on the valid correlation grid centred on a
+known particle coordinate.  The `half_height` (and optional `half_width`) values are
+expressed in units of *valid* pixels; the code automatically extends the extracted
+micrograph patch so that all valid placements of the template within that window are
+considered.  You may provide multiple windows to search several particles in the
+same micrograph.
+
+When the list of coordinates is very large you can also stream the window
+definitions from a tabular file using the `search_window_table_path` option.  CSV,
+Parquet, and Feather formats are supported; only the three columns
+`center_y_img`, `center_x_img`, and `half_height` are required, with `half_width`
+remaining optional.  For example, a configuration that streams windows from a CSV
+file in batches of 500 rows would look like:
+
+```yaml
+search_window_table_path: /path/to/windows.csv
+search_window_table_format: auto  # optional, inferred from the suffix
+search_window_chunk_size: 500      # number of CSV rows to load per batch
+```
+
+If both `search_windows` and `search_window_table_path` are provided the explicit
+list takes precedence.  The CSV reader is chunked so that millions of coordinates
+can be processed without exceeding host memory; Parquet and Feather inputs are
+loaded eagerly because pandas does not expose streaming readers for these
+formats.
+
+Only the `run_match_template` entry point supports constrained windows at this
+time—distributed execution raises an informative error.  Outside the configured
+regions the MIP and z-score maps are filled with `-inf`, ensuring that the automatic
+peak picking ignores unsearched pixels.  The `MatchTemplateManager` also adjusts the
+default z-score cutoff so that the expected number of false positives corresponds to
+the reduced number of pixels that were inspected; custom `locate_peaks_kwargs`
+continue to work as before.
 
 Currently, Leopard-EM uses a false-positive rate of 1 per micrograph by default to differentiate between true particles and background.
 

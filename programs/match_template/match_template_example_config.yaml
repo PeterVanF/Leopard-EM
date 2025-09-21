@@ -50,3 +50,13 @@ computational_config:
   gpu_ids:
   - 0
   num_cpus: 1
+# Optional: limit the 2DTM search to specific windows around known coordinates.
+# search_windows:
+#   - center_y_img: 2048.0
+#     center_x_img: 1984.0
+#     half_height: 64   # search +/- 64 valid pixels vertically
+#     half_width: 96    # override horizontal extent (defaults to half_height)
+# Alternatively, stream large coordinate lists from a tabular file.
+# search_window_table_path: /some/path/to/windows.csv
+# search_window_table_format: auto   # csv/parquet/feather (auto uses file suffix)
+# search_window_chunk_size: 500      # rows per CSV chunk; ignored for other formats

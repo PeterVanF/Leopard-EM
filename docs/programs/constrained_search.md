@@ -9,6 +9,43 @@ The constrained search program takes in locations and orientations for one parti
 This allows us to perform for fewer cross correlations, reducing the noise and thus increasing our sensitivity.
 This increased sensitivity is incredibly useful when searching for smaller proteins which may associate with a larger complex but otherwise fall below the noise floor of full-orientation 2DTM.
 
+## Step-by-step workflow
+
+1. **Identify the reference particle with full-orientation 2DTM.** Run the
+   [match template program](match_template.md) on each micrograph to localise the
+   large reference complex.  If the approximate positions of the target partner
+   are known you can accelerate this step by enabling the
+   [`search_windows`](match_template.md#restricting-the-search-to-regions-of-interest)
+   option introduced in this update.  When thousands of coordinates are
+   available, point the configuration at a CSV/Parquet/Feather table using
+   `search_window_table_path` to stream the windows instead of listing them
+   individually.
+2. **Refine the reference particle poses.** Use the standard refine-template
+   program on the match-template peaks to produce high-confidence orientations
+   and defocus values for the reference particle.  The constrained search reuses
+   these parameters directly.
+3. **Prepare particle stacks.** Export the refined reference particle table to a
+   CSV file and duplicate it for the constrained particle.  The constrained copy
+   will ultimately hold the second particle’s statistics; only the
+   `correlation_average_path` and `correlation_variance_path` columns are used as
+   inputs at this stage.  Ensure each stack contains particles from a *single*
+   micrograph—constrained search currently operates on one micrograph at a time.
+4. **Determine the relative geometry between the particles.** Simulate or align
+   two PDB models representing the reference and constrained particles and use
+   the helper scripts in `programs/constrained_search/utils/` (for example
+   `get_center_vector.py` and `get_rot_axis.py`) to measure the centre offset and
+   rotation axis.
+5. **Populate the YAML configuration.** Edit the example configuration provided
+   in `programs/constrained_search/constrained_search_example_config.yaml` with
+   the paths and numerical values extracted in the previous steps.
+6. **Execute the program.** Launch the driver script
+   `programs/constrained_search/run_constrained_search.py` after updating the
+   `YAML_CONFIG_PATH` and `DATAFRAME_OUTPUT_PATH` constants.  The script prints
+   the z-score threshold corresponding to your requested false-positive rate and
+   writes both the full results and an above-threshold CSV to disk.
+
+The following sections describe each configuration block in more detail.
+
 ## Configuration options
 
 A default config file for the constrained search program is available [here on the GitHub page](https://raw.githubusercontent.com/Lucaslab-Berkeley/Leopard-EM/refs/heads/main/programs/constrained_search/constrained_search_example_config.yaml).
@@ -86,6 +123,25 @@ orientation_refinement_config:
 ### Pre-processing filters and computational config
 
 These should be the same as for [Match Template](../programs/match_template.md).
+
+## Output files and interpretation
+
+The driver script saves three artefacts:
+
+- `*_constrained.csv` — the full per-particle table containing refined
+  positions (`refined_pos_x_img`, `refined_pos_y_img`), orientations, relative
+  defocus, and the correlation statistics required for downstream filtering.
+- `*_constrained_above_threshold.csv` — a filtered subset that keeps only rows
+  whose z-score exceeds the automatically determined noise-floor threshold.  This
+  file is convenient when visualising likely hits.
+- `*_constrained_parameters.csv` — metadata recording the number of defocus
+  planes, orientations, pixels searched, and the z-score threshold used.  Keep
+  this alongside the particle table for reproducibility.
+
+Inspect the refined MIP and z-score values to validate that the constrained
+search improved the signal relative to the initial full-orientation run.  When a
+second pass over the same micrograph is required, start from the original match
+template CSV to avoid duplicating detections.
 
 
 
